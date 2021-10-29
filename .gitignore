@@ -37,3 +37,7 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Large files and executables
+Networks/LA/1Feb/osmdata_network.osm
+Networks/osmconvert64-0.8.8p.exe

@@ -1,0 +1,125 @@
+---
+title: "Service Changes"
+author: "Carole Voulgaris"
+date: "9/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Required libraries
+
+```{r, message = FALSE}
+library(tidyverse)
+library(tidytransit)
+library(knitr)
+```
+
+# Los Angeles
+
+Average weekday frequency before COVID
+
+```{r, message=FALSE}
+LA_pre_covid <- read_gtfs("Networks/LA/1Feb/GTFS.zip")
+
+LA_pre_covid_calendar <- LA_pre_covid$calendar
+
+LA_pre_covid_trips <- LA_pre_covid$trips
+
+# filter trips for typical weekday
+LA_pre_covid_calendar_wkdy <- LA_pre_covid_calendar %>%
+  filter(monday == 1 &
+           tuesday == 1 &
+           wednesday == 1 &
+           thursday == 1 &
+           friday == 1)
+
+LA_pre_covid_trips_wkdy <- LA_pre_covid_trips %>%
+  left_join(LA_pre_covid_calendar_wkdy) %>%
+  filter(!is.na(monday))
+
+LA_pre_covid_wkdy_freq <- LA_pre_covid_trips_wkdy %>%
+  group_by(route_id) %>%
+  summarise(daily_trips_pre = n())
+
+```
+
+Average Weekday frequency during COVID
+
+```{r, message=FALSE}
+LA_covid <- read_gtfs("Networks/LA/31May/GTFS.zip")
+
+LA_covid_calendar <- LA_covid$calendar
+
+LA_covid_trips <- LA_covid$trips
+
+# filter trips for typical weekday
+LA_covid_calendar_wkdy <- LA_covid_calendar %>%
+  filter(monday == 1 &
+           tuesday == 1 &
+           wednesday == 1 &
+           thursday == 1 &
+           friday == 1)
+
+LA_covid_trips_wkdy <- LA_covid_trips %>%
+  left_join(LA_covid_calendar_wkdy) %>%
+  filter(!is.na(monday))
+
+LA_covid_wkdy_freq <- LA_covid_trips_wkdy %>%
+  group_by(route_id) %>%
+  summarise(daily_trips_covid = n())
+
+```
+
+Calculate changes by line.
+
+```{r, message=FALSE, warning=FALSE}
+compare_freq <- full_join(LA_pre_covid_wkdy_freq, LA_covid_wkdy_freq) %>%
+  mutate(pct_chng = (daily_trips_covid - daily_trips_pre) / daily_trips_pre) 
+
+ggplot(compare_freq) +
+  geom_histogram(aes(x = pct_chng), color = "white") +
+  scale_x_continuous(name = "Percent change in weekday frequency, Feb - May, 2020",
+                     breaks = breaks <- seq(-0.7, 0.5, by=0.1),
+                     labels = paste(prettyNum(breaks*100, digits=0), "%", sep="")) +
+  scale_y_continuous(name = "Number of lines",
+                     breaks = seq(0,20, by=2)) +
+  theme_bw()
+```
+
+Present the results in a neat little table.
+
+```{r}
+LA_summary <- tibble(City = "Los Angeles",
+                     `Lines with no frequency change` = 
+                       table(compare_freq$pct_chng == 0)["TRUE"],
+                     `Lines with reduced frequency` =
+                       table(compare_freq$pct_chng < 0)["TRUE"],
+                     `Lines with increased frequency` = 
+                       table(compare_freq$pct_chng > 0)["TRUE"],
+                     `Maximum frequency reduction` = 
+                       -1 * min(compare_freq$pct_chng, na.rm=TRUE),
+                     `Maximum frequency increase` =
+                       max(compare_freq$pct_chng, na.rm=TRUE))
+
+kable(LA_summary)
+```
+
+# Dallas
+
+# Houston
+
+# New York
+
+# Chicago
+
+# Boston
+
+# Houston
+
+# Dallas
+
+#
+

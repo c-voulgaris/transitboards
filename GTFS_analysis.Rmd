@@ -1,0 +1,159 @@
+---
+title: "Untitled"
+author: "Carole Voulgaris"
+date: "9/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Required libraries
+
+```{r}
+library(tidyverse)
+library(tidytransit)
+library(sf)
+library(tidycensus)
+library(r5r)
+library(osmdata)
+```
+# Get extent of shed for each line
+
+1. Get bounding box for the transit network
+
+```{r}
+LA_bus <- read_gtfs("Networks/LA/1Feb/GTFS.zip")
+
+LA_stops <- st_as_sf(LA_bus$stops, coords = c("stop_lon", "stop_lat"), crs = "WGS84")
+LA_extent <- st_bbox(LA_stops)
+
+opq(bbox = LA_extent, timeout = 120) %>%
+  add_osm_feature(key = 'highway') %>%
+  osmdata_xml(file = 'Networks/LA/1Feb/osmdata_network.osm')
+
+```
+
+At this point, you'll need to use [osmconvert](https://wiki.openstreetmap.org/wiki/Osmconvert){target="_blank"} to convert the osm file to a pbf file.
+
+```{r}
+LA_bus_url <- feedlist[feedlist$t == "LA Metro Bus GTFS",]$url_d
+LA_bus <- read_gtfs(LA_bus_url)
+
+LA_bus_calendar <- LA_bus$calendar
+
+LA_bus_trips <- LA_bus$trips
+
+# filter trips for typical weekday
+LA_bus_calendar_wkdy <- LA_bus_calendar %>%
+  filter(monday == 1 &
+           tuesday == 1 &
+           wednesday == 1 &
+           thursday == 1 &
+           friday == 1)
+
+LA_bus_trips_wkdy <- LA_bus_trips %>%
+  left_join(LA_bus_calendar_wkdy) %>%
+  filter(!is.na(LA_bus_trips_wkdy$monday))
+
+# Get list of stops for each trip
+LA_bus_trips_wkdy_stops <- 
+
+
+# find all the stops for each trip
+
+
+
+
+```
+
+Get data on pre-covid frequency
+
+```{r}
+LA_pre_covid <- read_gtfs("GTFS/LA_pre.zip")
+
+LA_pre_covid_calendar <- LA_pre_covid$calendar
+
+LA_pre_covid_trips <- LA_pre_covid$trips
+
+# filter trips for typical weekday
+LA_pre_covid_calendar_wkdy <- LA_pre_covid_calendar %>%
+  filter(monday == 1 &
+           tuesday == 1 &
+           wednesday == 1 &
+           thursday == 1 &
+           friday == 1)
+
+LA_pre_covid_trips_wkdy <- LA_pre_covid_trips %>%
+  left_join(LA_pre_covid_calendar_wkdy) %>%
+  filter(!is.na(monday))
+
+LA_pre_covid_wkdy_freq <- LA_pre_covid_trips_wkdy %>%
+  group_by(route_id) %>%
+  summarise(daily_trips_pre = n())
+
+```
+
+Get data on covid frequency
+
+```{r}
+LA_covid <- read_gtfs("GTFS/LA_May.zip")
+
+LA_covid_calendar <- LA_covid$calendar
+
+LA_covid_trips <- LA_covid$trips
+
+# filter trips for typical weekday
+LA_covid_calendar_wkdy <- LA_covid_calendar %>%
+  filter(monday == 1 &
+           tuesday == 1 &
+           wednesday == 1 &
+           thursday == 1 &
+           friday == 1)
+
+LA_covid_trips_wkdy <- LA_covid_trips %>%
+  left_join(LA_covid_calendar_wkdy) %>%
+  filter(!is.na(monday))
+
+LA_covid_wkdy_freq <- LA_covid_trips_wkdy %>%
+  group_by(route_id) %>%
+  summarise(daily_trips_covid = n())
+
+```
+
+check change
+
+```{r}
+compare_freq <- full_join(LA_pre_covid_wkdy_freq, LA_covid_wkdy_freq) %>%
+  mutate(pct_chng = (daily_trips_covid - daily_trips_pre) / daily_trips_pre) 
+
+ggplot(compare_freq) +
+  geom_histogram(aes(x = pct_chng), color = "white") +
+  scale_x_continuous(name = "Percent change in weekday frequency, Feb - May, 2020",
+                     breaks = breaks <- seq(-0.7, 0.5, by=0.1),
+                     labels = paste(prettyNum(breaks*100, digits=0), "%", sep="")) +
+  scale_y_continuous(name = "Number of lines",
+                     breaks = seq(0,20, by=2)) +
+  theme_bw()
+```
+
+Create points for each route
+
+```{r}
+LA_pre_covid_routes_sf <- LA_pre_covid$stop_times %>%
+  left_join(LA_pre_covid$stops) %>%
+  st_as_sf(coords = c('stop_lon', 'stop_lat'), crs = "WGS84") %>%
+  select(trip_id) %>%
+  group_by(trip_id) %>%
+  summarize() %>%
+  st_cast("MULTIPOINT") %>%
+  left_join(LA_pre_covid$trips) %>%
+  select(route_id) 
+
+LA_pre_covid_routes_sf <- LA_pre_covid_routes_sf %>%
+  mutate(n_stops = npts(LA_pre_covid_routes_sf, by_feature = TRUE))
+
+
+#routes_sf <- LA_pre_covid$ %>% group_by(id) %>% summarize(m = mean(attr_data)) %>% st_cast("MULTIPOINT")
+```
