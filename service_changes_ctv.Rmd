@@ -79,14 +79,17 @@ Calculate changes by line.
 compare_freq_LA <- full_join(LA_pre_covid_wkdy_freq, LA_covid_wkdy_freq) %>%
   mutate(pct_chng = (daily_trips_covid - daily_trips_pre) / daily_trips_pre) 
 
-ggplot(compare_freq) +
+LA_hist <- ggplot(compare_freq_LA) +
   geom_histogram(aes(x = pct_chng), color = "white") +
   scale_x_continuous(name = "Percent change in weekday frequency, Feb - May, 2020",
                      breaks = breaks <- seq(-0.7, 0.5, by=0.1),
                      labels = paste(prettyNum(breaks*100, digits=0), "%", sep="")) +
   scale_y_continuous(name = "Number of lines",
-                     breaks = seq(0,20, by=2)) +
+                     limits = c(0,25),
+                     breaks = seq(0,24, by=2)) +
   theme_bw()
+
+LA_hist
 ```
 
 Present the results in a neat little table.
@@ -94,15 +97,15 @@ Present the results in a neat little table.
 ```{r}
 LA_summary <- tibble(City = "Los Angeles",
                      `Lines with no frequency change` = 
-                       table(compare_freq$pct_chng == 0)["TRUE"],
+                       table(compare_freq_LA$pct_chng == 0)["TRUE"],
                      `Lines with reduced frequency` =
-                       table(compare_freq$pct_chng < 0)["TRUE"],
+                       table(compare_freq_LA$pct_chng < 0)["TRUE"],
                      `Lines with increased frequency` = 
-                       table(compare_freq$pct_chng > 0)["TRUE"],
+                       table(compare_freq_LA$pct_chng > 0)["TRUE"],
                      `Maximum frequency reduction` = 
-                       -1 * min(compare_freq$pct_chng, na.rm=TRUE),
+                       -1 * min(compare_freq_LA$pct_chng, na.rm=TRUE),
                      `Maximum frequency increase` =
-                       max(compare_freq$pct_chng, na.rm=TRUE))
+                       max(compare_freq_LA$pct_chng, na.rm=TRUE))
 
 kable(LA_summary)
 ```
@@ -116,7 +119,9 @@ Dallas_pre_covid <- read_gtfs("Networks/Dallas/1Feb/GTFS.zip")
 
 Dallas_pre_covid_calendar <- Dallas_pre_covid$calendar
 
-Dallas_pre_covid_trips <- Dallas_pre_covid$trips
+Dallas_pre_covid_trips <- Dallas_pre_covid$trips %>%
+  left_join(Dallas_pre_covid$routes) %>%
+  select(service_id, trip_id, route_short_name)
 
 # filter trips for typical weekday
 Dallas_pre_covid_calendar_wkdy <- Dallas_pre_covid_calendar %>%
@@ -131,34 +136,37 @@ Dallas_pre_covid_trips_wkdy <- Dallas_pre_covid_trips %>%
   filter(!is.na(monday))
 
 Dallas_pre_covid_wkdy_freq <- Dallas_pre_covid_trips_wkdy %>%
-  group_by(route_id) %>%
+  group_by(route_short_name) %>%
   summarise(daily_trips_pre = n())
 
 ```
 
 Average Weekday frequency during COVID
 
+No Friday service?
+
 ```{r, message=FALSE}
 Dallas_covid <- read_gtfs("Networks/Dallas/31May/GTFS.zip")
 
 Dallas_covid_calendar <- Dallas_covid$calendar
 
-Dallas_covid_trips <- Dallas_covid$trips
+Dallas_covid_trips <- Dallas_covid$trips %>%
+  left_join(Dallas_covid$routes) %>%
+  select(service_id, trip_id, route_short_name)
 
 # filter trips for typical weekday
 Dallas_covid_calendar_wkdy <- Dallas_covid_calendar %>%
   filter(monday == 1 &
            tuesday == 1 &
            wednesday == 1 &
-           thursday == 1 &
-           friday == 1)
+           thursday == 1)
 
 Dallas_covid_trips_wkdy <- Dallas_covid_trips %>%
   left_join(Dallas_covid_calendar_wkdy) %>%
   filter(!is.na(monday))
 
 Dallas_covid_wkdy_freq <- Dallas_covid_trips_wkdy %>%
-  group_by(route_id) %>%
+  group_by(route_short_name) %>%
   summarise(daily_trips_covid = n())
 
 ```
@@ -169,14 +177,17 @@ Calculate changes by line.
 compare_freq_Dallas <- full_join(Dallas_pre_covid_wkdy_freq, Dallas_covid_wkdy_freq) %>%
   mutate(pct_chng = (daily_trips_covid - daily_trips_pre) / daily_trips_pre) 
 
-ggplot(compare_freq) +
+Dallas_hist <- ggplot(compare_freq_Dallas) +
   geom_histogram(aes(x = pct_chng), color = "white") +
   scale_x_continuous(name = "Percent change in weekday frequency, Feb - May, 2020",
                      breaks = breaks <- seq(-0.7, 0.5, by=0.1),
                      labels = paste(prettyNum(breaks*100, digits=0), "%", sep="")) +
   scale_y_continuous(name = "Number of lines",
-                     breaks = seq(0,20, by=2)) +
+                     limits = c(0,25),
+                     breaks = seq(0,24, by=2)) +
   theme_bw()
+
+Dallas_hist
 ```
 
 Present the results in a neat little table.
@@ -184,15 +195,15 @@ Present the results in a neat little table.
 ```{r}
 Dallas_summary <- tibble(City = "Dallas",
                      `Lines with no frequency change` = 
-                       table(compare_freq$pct_chng == 0)["TRUE"],
+                       table(compare_freq_Dallas$pct_chng == 0)["TRUE"],
                      `Lines with reduced frequency` =
-                       table(compare_freq$pct_chng < 0)["TRUE"],
+                       table(compare_freq_Dallas$pct_chng < 0)["TRUE"],
                      `Lines with increased frequency` = 
-                       table(compare_freq$pct_chng > 0)["TRUE"],
+                       table(compare_freq_Dallas$pct_chng > 0)["TRUE"],
                      `Maximum frequency reduction` = 
-                       -1 * min(compare_freq$pct_chng, na.rm=TRUE),
+                       -1 * min(compare_freq_Dallas$pct_chng, na.rm=TRUE),
                      `Maximum frequency increase` =
-                       max(compare_freq$pct_chng, na.rm=TRUE))
+                       max(compare_freq_Dallas$pct_chng, na.rm=TRUE))
 
 city_summary = rbind(LA_summary, Dallas_summary)
 
@@ -200,6 +211,106 @@ kable(city_summary)
 ```
 
 # New York
+
+Average weekday frequency before COVID
+
+```{r, message=FALSE}
+NY_pre_covid <- read_gtfs("Networks/New York/1Feb/GTFS.zip")
+
+Dallas_pre_covid_calendar <- Dallas_pre_covid$calendar
+
+Dallas_pre_covid_trips <- Dallas_pre_covid$trips %>%
+  left_join(Dallas_pre_covid$routes) %>%
+  select(service_id, trip_id, route_short_name)
+
+# filter trips for typical weekday
+Dallas_pre_covid_calendar_wkdy <- Dallas_pre_covid_calendar %>%
+  filter(monday == 1 &
+           tuesday == 1 &
+           wednesday == 1 &
+           thursday == 1 &
+           friday == 1)
+
+Dallas_pre_covid_trips_wkdy <- Dallas_pre_covid_trips %>%
+  left_join(Dallas_pre_covid_calendar_wkdy) %>%
+  filter(!is.na(monday))
+
+Dallas_pre_covid_wkdy_freq <- Dallas_pre_covid_trips_wkdy %>%
+  group_by(route_short_name) %>%
+  summarise(daily_trips_pre = n())
+
+```
+
+Average Weekday frequency during COVID
+
+No Friday service?
+
+```{r, message=FALSE}
+Dallas_covid <- read_gtfs("Networks/Dallas/31May/GTFS.zip")
+
+Dallas_covid_calendar <- Dallas_covid$calendar
+
+Dallas_covid_trips <- Dallas_covid$trips %>%
+  left_join(Dallas_covid$routes) %>%
+  select(service_id, trip_id, route_short_name)
+
+# filter trips for typical weekday
+Dallas_covid_calendar_wkdy <- Dallas_covid_calendar %>%
+  filter(monday == 1 &
+           tuesday == 1 &
+           wednesday == 1 &
+           thursday == 1)
+
+Dallas_covid_trips_wkdy <- Dallas_covid_trips %>%
+  left_join(Dallas_covid_calendar_wkdy) %>%
+  filter(!is.na(monday))
+
+Dallas_covid_wkdy_freq <- Dallas_covid_trips_wkdy %>%
+  group_by(route_short_name) %>%
+  summarise(daily_trips_covid = n())
+
+```
+
+Calculate changes by line.
+
+```{r, message=FALSE, warning=FALSE}
+compare_freq_Dallas <- full_join(Dallas_pre_covid_wkdy_freq, Dallas_covid_wkdy_freq) %>%
+  mutate(pct_chng = (daily_trips_covid - daily_trips_pre) / daily_trips_pre) 
+
+Dallas_hist <- ggplot(compare_freq_Dallas) +
+  geom_histogram(aes(x = pct_chng), color = "white") +
+  scale_x_continuous(name = "Percent change in weekday frequency, Feb - May, 2020",
+                     breaks = breaks <- seq(-0.7, 0.5, by=0.1),
+                     labels = paste(prettyNum(breaks*100, digits=0), "%", sep="")) +
+  scale_y_continuous(name = "Number of lines",
+                     limits = c(0,25),
+                     breaks = seq(0,24, by=2)) +
+  theme_bw()
+
+Dallas_hist
+```
+
+Present the results in a neat little table.
+
+```{r}
+Dallas_summary <- tibble(City = "Dallas",
+                     `Lines with no frequency change` = 
+                       table(compare_freq_Dallas$pct_chng == 0)["TRUE"],
+                     `Lines with reduced frequency` =
+                       table(compare_freq_Dallas$pct_chng < 0)["TRUE"],
+                     `Lines with increased frequency` = 
+                       table(compare_freq_Dallas$pct_chng > 0)["TRUE"],
+                     `Maximum frequency reduction` = 
+                       -1 * min(compare_freq_Dallas$pct_chng, na.rm=TRUE),
+                     `Maximum frequency increase` =
+                       max(compare_freq_Dallas$pct_chng, na.rm=TRUE))
+
+city_summary = rbind(LA_summary, Dallas_summary)
+
+kable(city_summary)
+```
+
+
 
 # Chicago
 
