@@ -1,0 +1,66 @@
+---
+title: "Untitled"
+author: "Carole Voulgaris"
+date: "11/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+```
+
+Median transit commute in United States. Ratio standard errors: http://www.met.rdg.ac.uk/~swrhgnrj/combining_errors.pdf
+
+```{r}
+vars_tt <- c(tt_tot = "B08134_061",
+             tt_under10 = "B08134_062",
+             tt_10_14 = "B08134_063",
+             tt_15_19 = "B08134_064",
+             tt_20_24 = "B08134_065",
+             tt_25_29 = "B08134_066",
+             tt_30_34 = "B08134_067",
+             tt_35_44 = "B08134_068",
+             tt_45_59 = "B08134_069",
+             tt_60plus = "B08134_070",
+             avg = 'B08136_007')
+
+tt_pt <- get_acs(geography = "us", variables = vars_tt, summary_var = "B08134_061") %>%
+  mutate(pct = estimate / summary_est) %>%
+  mutate(SE = moe / 1.645) %>%
+  mutate(summary_SE = summary_moe / 1.645) %>%
+  mutate(pct_SE = (pct^2*((SE/estimate)^2 + (summary_SE/summary_est)^2))^0.5)
+  
+#  mutate(pct_SE = ((summary_est^2*((SE/estimate)^2 + (summary_SE/summary)^2)))^0.5)
+
+
+
+write_csv(tt_pt, file="tt_pt.csv")
+```
+plot logistic cdf
+
+```{r}
+times <- seq(0, 120, by = 1)
+
+data <- tibble(`Travel time from origin to destination (minutes)` = times,
+               `Accessibility of destination` = 1- plogis(times, location = 45, scale = 5))
+
+ggplot(data, aes(x = `Travel time from origin to destination (minutes)`, 
+                 y = `Accessibility of destination`)) +
+  scale_x_continuous(breaks = seq(0,120, by = 10),
+                     name = "Travel time from origin\nto destination (minutes)") +
+  scale_y_continuous(name = "Weight applied to\ndestination in\ncalculating the\naccessibility\nof the origin") +
+  geom_line() +
+  theme_bw()
+
+ggsave("cdf_plot.png", width = 8,  height = 3,
+  units = "in")
+
+```
+
