@@ -1,159 +1,163 @@
 ---
-title: "Untitled"
+title: "Walkshed analysis - Los Angeles Example"
 author: "Carole Voulgaris"
 date: "9/17/2021"
-output: html_document
+output: 
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_depth: 3
+    toc_float: true
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Required libraries
+# Setup
 
-```{r}
-library(tidyverse)
-library(tidytransit)
-library(sf)
-library(tidycensus)
-library(r5r)
-library(osmdata)
-```
-# Get extent of shed for each line
+You'll need to increase the memory for R5R and load the required libraries.
 
-1. Get bounding box for the transit network
+```{r load libraries, message=FALSE}
+# increase memory for r5r
+options(java.parameters = "-Xmx2G")
 
-```{r}
-LA_bus <- read_gtfs("Networks/LA/1Feb/GTFS.zip")
-
-LA_stops <- st_as_sf(LA_bus$stops, coords = c("stop_lon", "stop_lat"), crs = "WGS84")
-LA_extent <- st_bbox(LA_stops)
-
-opq(bbox = LA_extent, timeout = 120) %>%
-  add_osm_feature(key = 'highway') %>%
-  osmdata_xml(file = 'Networks/LA/1Feb/osmdata_network.osm')
-
+library(sf) # spatial data package
+library(tidycensus) # for retrieving census data
+library(tidyverse) # for everything
+library(r5r) # for getting transit sf features and calculating walk times
 ```
 
-At this point, you'll need to use [osmconvert](https://wiki.openstreetmap.org/wiki/Osmconvert){target="_blank"} to convert the osm file to a pbf file.
+# Get census data (with geometry)
 
-```{r}
-LA_bus_url <- feedlist[feedlist$t == "LA Metro Bus GTFS",]$url_d
-LA_bus <- read_gtfs(LA_bus_url)
+In this example, I'm just getting a set of race/ethnicity variables for each census block.
 
-LA_bus_calendar <- LA_bus$calendar
+I'm also generating a set of points for the centroid of each census block. Since I'll be using those centroid points to build a travel time matrix, I'll need to rename the `GEOID` column to be called `id` and tranform the data to WGS 84 (both requirements of the `travel_time_matrix()` function in R5R).
 
-LA_bus_trips <- LA_bus$trips
+```{r get census data, message=FALSE, warning=FALSE, results='hide'}
+pop_by_race = c(total = "P005001",
+                nh_white = "P005003",
+                nh_black = "P005004",
+                nh_asian = "P005006",
+                hispanic = "P005010")
 
-# filter trips for typical weekday
-LA_bus_calendar_wkdy <- LA_bus_calendar %>%
-  filter(monday == 1 &
-           tuesday == 1 &
-           wednesday == 1 &
-           thursday == 1 &
-           friday == 1)
+la_blocks <- get_decennial(geography = "block",
+                           state = "CA",
+                           county = "Los Angeles",
+                           variables = pop_by_race,
+                           geometry = TRUE,
+                           output = "wide") %>%
+  st_transform(crs = "WGS84")
 
-LA_bus_trips_wkdy <- LA_bus_trips %>%
-  left_join(LA_bus_calendar_wkdy) %>%
-  filter(!is.na(LA_bus_trips_wkdy$monday))
+la_centroids <- st_centroid(la_blocks) %>%
+  rename(id = "GEOID") 
+  
+```
 
-# Get list of stops for each trip
-LA_bus_trips_wkdy_stops <- 
+# Get transit route and stop locations
 
+**Before running any of the following, you'll need to make sure you have the GTFS network that was in place on Feb 1, 2020 in the `Networks/LA/1Feb` folder. That folder also needs to contain PBF file with the OpenStreetMap network for the area covered by the transit network.**
 
-# find all the stops for each trip
+First, set up the R5R core.
 
+```{r start r5r core, message=FALSE, warning=FALSE}
+r5r_core <- setup_r5("Networks/LA/1Feb", verbose = FALSE)
+```
 
+Now, use R5R to extract the transit routes and stop locations. Since we'll be using the stop locations to build a travel time matrix, we'll need to change the name of the `stop_index` column to `id`.
 
+```{r get transit locations, message=FALSE, warning=FALSE}
+transit <- transit_network_to_sf(r5r_core)
+
+transit_routes <- transit$routes 
+
+transit_stops <- transit$stops %>%
+  rename(id = stop_index)
+```
+
+# Generate travel time matrix
+
+We'll build a travel time matrix to calculate the travel time from each transit stop to each census block centroid. We're setting a maximum trip duration of ten minutes, so our matrix will only include census blocks within a ten-minute walk of a transit stop.
+
+We're done with R5R now, so we can free up some memory by stopping the R5R core.
+
+```{r calculate travel times, message=FALSE, warning=FALSE, results='hide'}
+ttm <- travel_time_matrix(r5r_core = r5r_core,
+                          origins = transit_stops,
+                          destinations =la_centroids,
+                          mode = "WALK",
+                          max_trip_duration = 10,
+                          verbose = FALSE)
+stop_r5(r5r_core)
+```
+
+# Generate walksheds with route-level data
+
+Now we'll get all the unique GEOIDs from the `toId` column of the travel time matrix. This is a list of census blocks with a centroid within a 10-minute walk of a transit stop.
+
+Then I'll use that list to filter the LA County census blocks to only include those within walking distance of transit and do a spatial join to identify which transit route serves each of those blocks.
+
+```{r filter blocks to walkshed}
+transit_block_list <- unique(ttm$toId)
+
+transit_blocks <- la_blocks %>%
+  filter(GEOID %in% transit_block_list) %>%
+  st_join(transit_routes, st_nearest_feature)
 
 ```
 
-Get data on pre-covid frequency
+Now, I can combine all the blocks that serve the same route and calculate population totals and percentages within each route's walkshed.
 
-```{r}
-LA_pre_covid <- read_gtfs("Networks/LA/1Feb/GTFS.zip")
-
-LA_pre_covid_calendar <- LA_pre_covid$calendar
-
-LA_pre_covid_trips <- LA_pre_covid$trips
-
-# filter trips for typical weekday
-LA_pre_covid_calendar_wkdy <- LA_pre_covid_calendar %>%
-  filter(monday == 1 &
-           tuesday == 1 &
-           wednesday == 1 &
-           thursday == 1 &
-           friday == 1)
-
-LA_pre_covid_trips_wkdy <- LA_pre_covid_trips %>%
-  left_join(LA_pre_covid_calendar_wkdy) %>%
-  filter(!is.na(monday))
-
-LA_pre_covid_wkdy_freq <- LA_pre_covid_trips_wkdy %>%
+```{r create walksheds}
+transit_walksheds <- transit_blocks %>%
   group_by(route_id) %>%
-  summarise(daily_trips_pre = n())
-
+  summarize(total = sum(total),
+            nh_white = sum(nh_white),
+            nh_black = sum(nh_black),
+            nh_asian = sum(nh_asian),
+            hispanic = sum(hispanic),
+            geometry = st_union(geometry),
+            route_id = first(route_id),
+            short_name = first(short_name),
+            mode = first(mode)) %>%
+  mutate(pct_nh_white = 100 * nh_white / total,
+         pct_nh_black = 100 * nh_black / total,
+         pct_nh_asian = 100 * nh_asian / total,
+         pct_hispanic = 100 * hispanic / total)
 ```
 
-Get data on covid frequency
+Now I can plot the results on a map.
 
-```{r}
-LA_covid <- read_gtfs("Networks/LA/31May/GTFS.zip")
-
-LA_covid_calendar <- LA_covid$calendar
-
-LA_covid_trips <- LA_covid$trips
-
-# filter trips for typical weekday
-LA_covid_calendar_wkdy <- LA_covid_calendar %>%
-  filter(monday == 1 &
-           tuesday == 1 &
-           wednesday == 1 &
-           thursday == 1 &
-           friday == 1)
-
-LA_covid_trips_wkdy <- LA_covid_trips %>%
-  left_join(LA_covid_calendar_wkdy) %>%
-  filter(!is.na(monday))
-
-LA_covid_wkdy_freq <- LA_covid_trips_wkdy %>%
-  group_by(route_id) %>%
-  summarise(daily_trips_covid = n())
-
+```{r map walksheds by race}
+ggplot(transit_walksheds) +
+  geom_sf(aes(fill = pct_nh_white), color = NA, alpha = 0.5) +
+  geom_sf(data = transit_routes, color = "black", alpha = 0.2) +
+ # geom_sf(data = transit_stops, color = "black", size = 0.05, alpha = 0.1) +
+  scale_fill_viridis_c(name = "Non-Hispanic\nwhite share of\npopulation served\nby route",
+                       breaks = breaks <- seq(0,80, by = 20),
+                       labels = paste(breaks, "%", sep = "")) +
+  theme_void() 
 ```
 
-check change
+I'm also interested in seeing how a histogram of this distribution
 
-```{r}
-compare_freq <- full_join(LA_pre_covid_wkdy_freq, LA_covid_wkdy_freq) %>%
-  mutate(pct_chng = (daily_trips_covid - daily_trips_pre) / daily_trips_pre) 
-
-ggplot(compare_freq) +
-  geom_histogram(aes(x = pct_chng), color = "white") +
-  scale_x_continuous(name = "Percent change in weekday frequency, Feb - May, 2020",
-                     breaks = breaks <- seq(-0.7, 0.5, by=0.1),
-                     labels = paste(prettyNum(breaks*100, digits=0), "%", sep="")) +
-  scale_y_continuous(name = "Number of lines",
-                     breaks = seq(0,20, by=2)) +
+```{r histogram, warning=FALSE}
+ggplot(transit_walksheds) +
+  geom_histogram(aes(x = pct_nh_white), 
+                 bins = 40,
+                 color = "black",
+                 fill = "gray") +
+  scale_x_continuous(name = "Non-Hispanic white share of population served by route",
+                     breaks = breaks <- seq(0,100, by = 20),
+                     labels = paste(breaks, "%", sep = "")) +
+  scale_y_continuous(name = "Number of routes") +
   theme_bw()
+
 ```
 
-Create points for each route
+# Save results
 
-```{r}
-LA_pre_covid_routes_sf <- LA_pre_covid$stop_times %>%
-  left_join(LA_pre_covid$stops) %>%
-  st_as_sf(coords = c('stop_lon', 'stop_lat'), crs = "WGS84") %>%
-  select(trip_id) %>%
-  group_by(trip_id) %>%
-  summarize() %>%
-  st_cast("MULTIPOINT") %>%
-  left_join(LA_pre_covid$trips) %>%
-  select(route_id) 
-
-LA_pre_covid_routes_sf <- LA_pre_covid_routes_sf %>%
-  mutate(n_stops = npts(LA_pre_covid_routes_sf, by_feature = TRUE))
-
-
-#routes_sf <- LA_pre_covid$ %>% group_by(id) %>% summarize(m = mean(attr_data)) %>% st_cast("MULTIPOINT")
+```{r save results}
+write_csv(transit_walksheds, "Data/LA_route_data.csv")
 ```
+
