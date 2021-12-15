@@ -1,0 +1,43 @@
+---
+title: "Get the OSM network"
+author: "Carole Voulgaris"
+date: "9/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Required libraries
+
+```{r}
+library(tidyverse)
+library(tidytransit)
+library(sf)
+library(tidycensus)
+library(r5r)
+library(osmdata)
+```
+You can modify this code to get the osm street network corresponding to a particular transit network.
+
+# Get the extent of the transit netw
+
+1. Get bounding box for the transit network
+
+```{r}
+LA_bus <- read_gtfs("Networks/LA/1Feb/GTFS.zip")
+
+LA_stops <- st_as_sf(LA_bus$stops, coords = c("stop_lon", "stop_lat"), crs = "WGS84")
+LA_extent <- st_bbox(LA_stops)
+
+opq(bbox = LA_extent, timeout = 120) %>%
+  add_osm_feature(key = 'highway') %>%
+  osmdata_xml(file = 'Networks/LA/1Feb/osmdata_network.osm')
+
+```
+
+At this point, you'll need to use [osmconvert](https://wiki.openstreetmap.org/wiki/Osmconvert){target="_blank"} to convert the osm file to a pbf file. 
+
+I've saved a copy of the executable to the "Networks" folder. Copy it into the `Networks/LA/1Feb/` folder, and run it from your computer (you're using a PC, right?)
+
