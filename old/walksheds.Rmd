@@ -161,3 +161,8 @@ ggplot(transit_walksheds) +
 write_csv(transit_walksheds, "Data/LA_route_data.csv")
 ```
 
+# Idea for a paper:
+
+Are transit route coverage areas more or less segregated than census tracts, zip codes, legislative districts, or municipalities?
+
+Could be an interesting study for Tranport Findings.

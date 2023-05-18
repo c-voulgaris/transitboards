@@ -1,0 +1,171 @@
+---
+title: "Transit Zones"
+author: "Carole Voulgaris"
+date: "4/7/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(sf)
+library(tigris)
+library(here)
+library(leaflet)
+library(htmlwidgets)
+library(tidytransit)
+```
+
+
+
+
+#Load ridership data
+
+```{r}
+ridership <- here("Data",
+                  "LA_metro_oct2019.csv") %>%
+  st_read(options=c("X_POSSIBLE_NAMES=long_","Y_POSSIBLE_NAMES=lat")) %>%
+  st_set_crs("WGS84") %>%
+   select(stopnum, 
+          DX_ACT_1,
+          DX_ACT_2,
+          DX_ACT_3,
+          DX_ACT_4,
+          DX_ACT_5,
+          DX_ACT_6,
+          DX_ACT_7,
+          DX_ACT_8,
+          DX_ACT_9,
+          DX_ACT_10,
+          DX_ACT_11,
+          DX_ACT_12,
+          DX_ACT_13,
+          DX_ACT_14,
+          DX_ACT_15,
+          DX_ACT_16,
+          DX_ACT_17,
+          DX_ACT_18,
+          LINEDIR_1,
+          LINEDIR_2,
+          LINEDIR_3,
+          LINEDIR_4,
+          LINEDIR_5,
+          LINEDIR_6,
+          LINEDIR_7,
+          LINEDIR_8,
+          LINEDIR_9,
+          LINEDIR_10,
+          LINEDIR_11,
+          LINEDIR_12,
+          LINEDIR_13,
+          LINEDIR_14,
+          LINEDIR_15,
+          LINEDIR_16,
+          LINEDIR_17,
+          LINEDIR_18) 
+
+activity <- ridership %>%
+  select(stopnum, starts_with("DX_ACT")) %>%
+  pivot_longer(cols = starts_with("DX_ACT"),
+               names_to = "line",
+               names_prefix = "DX_ACT_",
+               values_to = "DX_ACT") %>%
+  filter(DX_ACT != "") %>%
+  mutate(DX_ACT = as.numeric(DX_ACT)) %>%
+  st_drop_geometry()
+
+lines <- ridership %>%
+  select(stopnum, starts_with("LINEDIR")) %>%
+  pivot_longer(cols = starts_with("LINEDIR"),
+               names_to = "line",
+               names_prefix = "LINEDIR_",
+               values_to = "LINEDIR") %>%
+  filter(LINEDIR != "") 
+
+route_locs <- full_join(lines, activity) %>%
+  mutate(route = str_split_fixed(LINEDIR, "-", 2)[,1]) %>%
+  group_by(stopnum) %>%
+  mutate(max_riders = max(DX_ACT)) %>%
+  ungroup() %>%
+  filter(DX_ACT == max_riders) %>%
+  select(route)
+  
+```
+
+```{r}
+tracts <- tracts(state = "CA", county = "Los Angeles") %>%
+  st_transform("WGS84") 
+
+tracts <- tracts %>%
+  filter(lengths(st_is_within_distance(tracts, route_locs, dist = 500)) > 0)
+
+map <- leaflet(tracts) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(highlightOptions = highlightOptions(
+      weight = 1,
+      fillOpacity = 1,
+      bringToFront = TRUE),
+      weight = 1,
+      fillColor = "green",
+      color = "green",
+      label = ~ GEOID)
+  
+htmlwidgets::saveWidget(map, "tracts.html")
+```
+
+#Load block group centroids
+
+```{r}
+blocks <- blocks(state = "CA", county = "Los Angeles") %>%
+  st_transform("WGS84") %>%
+  mutate(tract = substr(GEOID20, 1, 11))
+
+blocks <- blocks %>%
+  filter(tract %in% tracts$GEOID) %>%
+  st_join(route_locs, join = st_nearest_feature) %>%
+  select(GEOID20, route) 
+```
+
+Create route zone boundaries
+
+```{r}
+route_zones <- blocks %>%
+  group_by(route) %>%
+  summarise()
+```
+
+
+# map the boundaries
+
+```{r}
+#route_zones <- st_read("route-zones.geojson")
+
+map <- leaflet(route_zones) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(highlightOptions = highlightOptions(
+      weight = 1,
+      fillOpacity = 1,
+      bringToFront = FALSE),
+      weight = 1,
+      color = "black",
+      fillColor = "green",
+      label = ~ route) 
+
+  
+htmlwidgets::saveWidget(map, "route-zones.html")
+```
+
+
+Save block list and route shapes
+
+```{r}
+st_write(route_zones, "route-zones.geojson")
+
+blocks %>%
+  st_drop_geometry() %>%
+  write_csv("blocks-by-route.csv")
+```
+
