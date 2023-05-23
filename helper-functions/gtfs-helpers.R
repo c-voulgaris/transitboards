@@ -4,6 +4,7 @@ library(sf)
 
 fn_daily_stop_freq <- function(my_gtfs) {
   
+  # Get the number of days the feed is valid
   if(length(my_gtfs$calendar_dates$date) > 0 &
      length(my_gtfs$calendar$start_date) > 0) {
     first_day <- min(min(my_gtfs$calendar$start_date), 
@@ -19,7 +20,6 @@ fn_daily_stop_freq <- function(my_gtfs) {
     first_day <- min(my_gtfs$calendar_dates$date)
     last_day <- max(my_gtfs$calendar_dates$date)
   }
-  
   n_days <- interval(first_day, last_day+1) / ddays(1)
   
   # For each service pattern, get the number of days it was effective
