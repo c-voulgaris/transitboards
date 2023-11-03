@@ -111,5 +111,9 @@ test_gtfs$trips <- trips
 
 validate <- validate_gtfs(test_gtfs)
 
-test_freq <- fn_daily_stop_freq(test_gtfs)
-  
+test_freq_stop <- fn_daily_stop_freq(test_gtfs)
+
+bgs <- tigris::block_groups(state = "MA", county = "Middlesex") |>
+  st_transform("WGS84")
+
+test_freq_trip <- fn_daily_trip_freq(test_gtfs, bgs)

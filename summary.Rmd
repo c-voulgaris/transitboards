@@ -1,0 +1,16 @@
+---
+title: "Summary"
+author: "Carole Voulgaris"
+date: "2023-05-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Measures of transit service
+
+From Deweese et al: the percent change in the number of unique trips serving a given area during a weekday
+
+Our method: Do not limit to weekdays.
